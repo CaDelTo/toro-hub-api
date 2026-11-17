@@ -1,0 +1,25 @@
+{
+  "name": "toro-hub-api",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy --minify",
+    "cf-typegen": "wrangler types --env-interface CloudflareBindings",
+    "test": "vitest run",
+    "typecheck": "tsc",
+    "check:boundaries": "! grep -rnE \"from '(\\.\\./)+(auth|flix|miru|tome)/\" src/modules"
+  },
+  "dependencies": {
+    "@hono/zod-openapi": "^1.6.3",
+    "hono": "^4.13.16",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.8.3",
+    "@cloudflare/workers-types": "^5.20261116.1",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0",
+    "wrangler": "^4.110.0"
+  },
+  "packageManager": "pnpm@11.5.3"
+}

@@ -1,0 +1,7 @@
+# Copiar a .dev.vars (ignorado por git) para `pnpm dev`.
+TMDB_API_KEY=
+TMDB_API_URL=
+TMDB_IMAGE_URL=
+PLAYER_BASE_URL=
+SITE_PASSWORD=
+JWT_SECRET=

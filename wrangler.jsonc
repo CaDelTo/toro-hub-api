@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "toro-hub-api",
+  "account_id": "f0741c09f20161be79ccfc55b4106f0d",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-17",
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    // Módulos montados en este Worker. Desplegar el mismo código con otro valor aísla verticales.
+    "ENABLED_MODULES": "auth,flix",
+    // Comparte la cookie de sesión entre subdominios. Vacío en local.
+    "COOKIE_DOMAIN": ""
+  }
+  // Cache API no funciona en *.workers.dev: activar al tener el dominio.
+  // "routes": [{ "pattern": "api.toro-hub.x", "custom_domain": true }]
+  // Secrets (wrangler secret put / .dev.vars en local): TMDB_API_KEY, TMDB_API_URL, TMDB_IMAGE_URL, PLAYER_BASE_URL, SITE_PASSWORD, JWT_SECRET
+}
