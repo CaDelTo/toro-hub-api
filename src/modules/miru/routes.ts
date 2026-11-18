@@ -19,7 +19,7 @@ const ok = <T extends z.ZodType>(schema: T) => ({
 const Page = z.coerce.number().int().min(1).max(500).default(1);
 const Id = z.object({ id: AnimeId });
 
-/** Los proveedores de vídeo buscan por título; el id de AniList confirma la obra exacta. */
+/** Los proveedores de vídeo buscan por título; los ids de Kitsu/AniList confirman la obra exacta. */
 async function animeRef(id: string): Promise<AnimeRef> {
   const a = await metadataProvider().getAnime(id);
   const { romaji, english } = a.alternativeTitles;
@@ -30,7 +30,7 @@ async function animeRef(id: string): Promise<AnimeRef> {
   };
 }
 
-/** Id de MyAnimeList, que Jikan necesita. AniList lo trae casi siempre. */
+/** Id de MyAnimeList, que Jikan necesita (de los mapeos de Kitsu). */
 async function malId(id: string): Promise<number> {
   const { mal } = (await metadataProvider().getAnime(id)).externalIds;
   if (mal === null) throw new AppError('miru', 'NOT_FOUND', 404, 'No MyAnimeList id for this anime');

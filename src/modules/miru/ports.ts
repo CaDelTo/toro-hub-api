@@ -1,6 +1,6 @@
 import type { AnimeDetail, AnimeSummary, Character, ListKind, Page, Source, Staff } from './domain';
 
-/** Port de catálogo (AniList hoy; Jikan como enriquecedor cuando llegue). */
+/** Port de catálogo (Kitsu hoy). */
 export interface AnimeMetadataProvider {
   id: string;
   list(kind: ListKind, page: number): Promise<Page<AnimeSummary>>;
@@ -18,7 +18,7 @@ export interface AnimeEnricher {
 }
 
 /** Lo que un proveedor de vídeo necesita para encontrar la obra exacta. */
-export type AnimeRef = { anilist: number; mal: number | null; year: number | null; titles: string[] };
+export type AnimeRef = { kitsu: number; anilist: number | null; mal: number | null; year: number | null; titles: string[] };
 
 export type EpisodeUnit = { id: string; number: number; title: string; languages: ('sub' | 'dub')[] };
 
