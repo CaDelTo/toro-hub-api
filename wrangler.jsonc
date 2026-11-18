@@ -15,5 +15,5 @@
   }
   // Cache API no funciona en *.workers.dev: activar al tener el dominio.
   // "routes": [{ "pattern": "api.toro-hub.x", "custom_domain": true }]
-  // Secrets (wrangler secret put / .dev.vars en local): TMDB_API_KEY, TMDB_API_URL, TMDB_IMAGE_URL, PLAYER_BASE_URL, SITE_PASSWORD, JWT_SECRET
+  // Secrets (wrangler secret put / .dev.vars en local): TMDB_API_KEY, TMDB_API_URL, TMDB_IMAGE_URL, PLAYER_BASE_URL, SITE_PASSWORD, JWT_SECRET, OMDB_API_KEY y OMDB_API_URL (opcionales)
 }

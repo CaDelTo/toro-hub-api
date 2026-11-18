@@ -199,6 +199,7 @@ export type Review = z.infer<typeof Review>;
 export type Collection = z.infer<typeof Collection>;
 export type Person = z.infer<typeof Person>;
 export type Genre = z.infer<typeof Genre>;
+export type Rating = z.infer<typeof Rating>;
 export type Source = z.infer<typeof Source>;
 export type Playback = z.infer<typeof Playback>;
 export type ListKind = z.infer<typeof ListKind>;

@@ -1,4 +1,4 @@
-import type { Collection, DiscoverQuery, Genre, ListKind, MediaType, Page, Person, Review, Season, Source, TitleDetail, TitleSummary } from './domain';
+import type { Collection, DiscoverQuery, Genre, ListKind, MediaType, Page, Person, Rating, Review, Season, Source, TitleDetail, TitleSummary } from './domain';
 
 /** Port de catálogo. Un adapter por proveedor (TMDB hoy); entra y sale solo el modelo canónico. */
 export interface MetadataProvider {
@@ -12,6 +12,12 @@ export interface MetadataProvider {
   getSeason(id: string, season: number): Promise<Season>;
   getCollection(id: string): Promise<Collection>;
   getPerson(id: string): Promise<Person>;
+}
+
+/** Enriquecedor de notas: suma IMDb, RT… al detalle a partir del id de IMDb. Opcional; si falla, el detalle sale igual. */
+export interface RatingsEnricher {
+  id: string;
+  ratings(imdbId: string): Promise<Rating[]>;
 }
 
 export type StreamRef = { type: MediaType; tmdb: number; imdb?: string };
