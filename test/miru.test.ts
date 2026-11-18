@@ -1,7 +1,11 @@
 import { createExecutionContext, waitOnExecutionContext } from 'cloudflare:test';
 import { env } from 'cloudflare:workers';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { HttpClient } from 'anime-sdk';
 import app from '../src/index';
+import type { AnimePlaybackProvider } from '../src/modules/miru/ports';
+import { createAnimeParadise } from '../src/modules/miru/providers/playback/animeparadise';
+import { getPlayback } from '../src/modules/miru/services/playback';
 
 // Fixtures recortados de respuestas reales de AniList y AnimeParadise.
 const media = {
@@ -116,7 +120,8 @@ describe('miru reproducción (AnimeParadise)', () => {
         provider: 'animeparadise', url: 'https://stream.animeparadise.moe/m3u8?url=TOKEN', kind: 'hls', quality: 'auto', language: 'sub',
         subtitles: [{ language: 'es', label: 'Spanish', url: 'https://stream.test/captions?url=x' }],
       }],
-      failed: [],
+      // MegaPlay se consulta también; aquí su embed no existe y queda en `failed` sin tumbar la respuesta.
+      failed: [{ provider: 'megaplay', code: 'MIRU_UPSTREAM_ERROR' }],
     });
   });
 
@@ -127,13 +132,7 @@ describe('miru reproducción (AnimeParadise)', () => {
     expect(body.error.code).toBe('MIRU_NOT_FOUND');
   });
 
-  it('obra que el proveedor no tiene → 404 (no adivina por título)', async () => {
-    mockUpstreams({ '/search': () => Response.json({ data: [apSearch.data[0]] }) });
-    // Otra URL: la respuesta 200 de un test anterior queda en el cache de borde.
-    expect((await get('/miru/anime/anilist-1/episodes')).status).toBe(404);
-  });
-
-  it('proveedor caído → 503 con código propio', async () => {
+  it('todos los proveedores caídos → 503 con código propio', async () => {
     mockUpstreams({ '/search': () => new Response('boom', { status: 500 }) });
     const { status, body } = await get('/miru/playback/anilist-154587?ep=1');
     expect(status).toBe(503);
@@ -141,27 +140,60 @@ describe('miru reproducción (AnimeParadise)', () => {
   });
 });
 
-describe('miru respaldo título + año (entradas sin póster de AniList)', () => {
+describe('miru mapeo de AnimeParadise', () => {
+  const ref = { anilist: 154587, mal: 52991, year: 2023, titles: ['Sousou no Frieren'] };
   const entry = (over: object) => ({ _id: 'X', title: 'Sousou no Frieren', posterImage: { medium: 'https://kitsu.test/p.jpg' }, animeSeason: { year: 2023 }, ...over });
-  const episodesFor = async (id: string, data: object[]) => {
-    mockUpstreams({ '/search': () => Response.json({ data }), '/anime/X/episode': () => Response.json(apEpisodes) });
-    return (await get(`/miru/anime/${id}/episodes`)).status;
+  const find = (data: object[]) => {
+    mockUpstreams({ '/search': () => Response.json({ data }) });
+    return createAnimeParadise(new HttpClient({ retry: false, disableRateLimit: true })).findEntry(ref);
   };
 
-  it('título exacto y mismo año → la acepta', async () => {
-    expect(await episodesFor('anilist-2', [entry({})])).toBe(200);
+  it('por id de AniList en el póster, aunque otra temporada salga antes', async () => {
+    expect(await find(apSearch.data)).toBe('animeparadise:S1');
+  });
+
+  it('obra que no tiene → null (no adivina por título)', async () => {
+    expect(await find([apSearch.data[0]])).toBeNull();
+  });
+
+  it('sin póster de AniList: título exacto y mismo año → la acepta', async () => {
+    expect(await find([entry({})])).toBe('animeparadise:X');
   });
 
   it('mismo título pero otro año → no', async () => {
-    expect(await episodesFor('anilist-3', [entry({ animeSeason: { year: 2011 } })])).toBe(404);
+    expect(await find([entry({ animeSeason: { year: 2011 } })])).toBeNull();
   });
 
   it('"Season 2" no iguala al título base', async () => {
-    expect(await episodesFor('anilist-4', [entry({ title: 'Sousou no Frieren Season 2' })])).toBe(404);
+    expect(await find([entry({ title: 'Sousou no Frieren Season 2' })])).toBeNull();
   });
 
   it('con póster de AniList de otra obra → no, aunque título y año coincidan', async () => {
-    expect(await episodesFor('anilist-5', [entry({ posterImage: { medium: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx999-a.jpg' } })])).toBe(404);
+    expect(await find([entry({ posterImage: { medium: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx999-a.jpg' } })])).toBeNull();
+  });
+});
+
+describe('miru getPlayback (scatter-gather)', () => {
+  const ref = { anilist: 1, mal: null, year: 2023, titles: ['X'] };
+  const src = (provider: string, language: 'sub' | 'dub') => ({ provider, url: `https://${provider}.test/${language}.m3u8`, kind: 'hls' as const, language, subtitles: [] });
+  const provider = (id: string, over: Partial<AnimePlaybackProvider> = {}): AnimePlaybackProvider => ({
+    id,
+    findEntry: async () => `${id}:1`,
+    getEpisodes: async () => [{ id: `${id}:1:1`, number: 1, title: 'Ep 1', languages: ['sub', 'dub'] }],
+    getSources: async (ep) => ep.languages.map((l) => src(id, l)),
+    ...over,
+  });
+
+  it('uno caído y otro vivo → devuelve las fuentes del que funciona', async () => {
+    const down = provider('down', { getSources: () => Promise.reject(new Error('no video')) });
+    const res = await getPlayback(ref, 1, [down, provider('up')]);
+    expect(res.sources).toEqual([src('up', 'sub'), src('up', 'dub')]);
+    expect(res.failed).toEqual([{ provider: 'down', code: 'MIRU_INTERNAL' }]);
+  });
+
+  it('lista de episodios vacía cuenta como "no lo tiene"', async () => {
+    const empty = provider('empty', { getEpisodes: async () => [] });
+    await expect(getPlayback(ref, 1, [empty])).rejects.toMatchObject({ code: 'MIRU_NOT_FOUND', status: 404 });
   });
 });
 

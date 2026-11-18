@@ -4,8 +4,9 @@ import { withTimeout } from '../../../shared/http';
 import type { Episode, Playback, Source } from '../domain';
 import type { AnimeEnricher, AnimePlaybackProvider, AnimeRef, EpisodeUnit } from '../ports';
 
-// Buscar la obra + listar episodios (+ resolver el stream) son 3–4 llamadas seguidas al proveedor.
-const PROVIDER_TIMEOUT_MS = 8000;
+// Buscar la obra + listar episodios + resolver el stream son 3–4 llamadas seguidas al proveedor, y en series
+// largas la lista pesa (ONE PIECE: ~340 KB, ~5 s en AnimeParadise). Con 8 s, esos títulos abrían el breaker para todos.
+const PROVIDER_TIMEOUT_MS = 15_000;
 // Las marcas de relleno son un extra: no esperamos a Jikan más que esto.
 const ENRICH_TIMEOUT_MS = 4000;
 
@@ -14,8 +15,9 @@ const guarded = <T>(p: AnimePlaybackProvider, fn: () => Promise<T>, timeoutMs: n
 
 async function episodesOf(p: AnimePlaybackProvider, ref: AnimeRef): Promise<EpisodeUnit[]> {
   const entry = await p.findEntry(ref);
-  if (!entry) throw new AppError('miru', 'NOT_FOUND', 404, `Not available on ${p.id}`);
-  return p.getEpisodes(entry);
+  const units = entry ? await p.getEpisodes(entry) : [];
+  if (!units.length) throw new AppError('miru', 'NOT_FOUND', 404, `Not available on ${p.id}`);
+  return units;
 }
 
 /** Episodios del primer proveedor que tenga la obra (fallback en orden de prioridad). */
@@ -50,7 +52,7 @@ export async function getPlayback(ref: AnimeRef, episode: number, providers: Ani
         async () => {
           const ep = (await episodesOf(p, ref)).find((e) => e.number === episode);
           if (!ep) throw new AppError('miru', 'NOT_FOUND', 404, `Episode ${episode} not available on ${p.id}`);
-          return p.getSources(ep.id);
+          return p.getSources(ep);
         },
         timeoutMs,
       ),

@@ -20,7 +20,7 @@ export interface AnimeEnricher {
 /** Lo que un proveedor de vídeo necesita para encontrar la obra exacta. */
 export type AnimeRef = { anilist: number; mal: number | null; year: number | null; titles: string[] };
 
-export type EpisodeUnit = { id: string; number: number; title: string };
+export type EpisodeUnit = { id: string; number: number; title: string; languages: ('sub' | 'dub')[] };
 
 /** Port de reproducción. El id de catálogo no coincide con el del proveedor: cada uno resuelve su entrada. */
 export interface AnimePlaybackProvider {
@@ -28,5 +28,6 @@ export interface AnimePlaybackProvider {
   /** null si el proveedor no tiene esta obra (nunca adivina por título a secas). */
   findEntry(ref: AnimeRef): Promise<string | null>;
   getEpisodes(entryId: string): Promise<EpisodeUnit[]>;
-  getSources(episodeId: string): Promise<Source[]>;
+  /** Fuentes de todos los idiomas que ofrezca el episodio. */
+  getSources(episode: EpisodeUnit): Promise<Source[]>;
 }
