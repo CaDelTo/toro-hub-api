@@ -7,21 +7,34 @@ import type { AnimePlaybackProvider } from '../src/modules/miru/ports';
 import { createAnimeParadise } from '../src/modules/miru/providers/playback/animeparadise';
 import { getPlayback } from '../src/modules/miru/services/playback';
 
-// Fixtures recortados de respuestas reales de AniList y AnimeParadise.
-const media = {
-  id: 154587, idMal: 52991,
-  title: { romaji: 'Sousou no Frieren', english: 'Frieren: Beyond Journey’s End', native: '葬送のフリーレン' },
-  description: 'The adventure is over<br><br>but <i>life</i> goes on.', format: 'TV', status: 'FINISHED', season: 'FALL', seasonYear: 2023,
-  episodes: 28, averageScore: 91, genres: ['Adventure', 'Drama'],
-  coverImage: { medium: 'https://img.test/m.jpg', large: 'https://img.test/l.jpg', extraLarge: 'https://img.test/xl.jpg' },
-  bannerImage: null, duration: 24, startDate: { year: 2023, month: 9, day: 29 }, endDate: { year: 2024, month: 3, day: null },
-  studios: { nodes: [{ name: 'MADHOUSE' }] },
+// Fixtures recortados de respuestas reales de Kitsu y AnimeParadise.
+const anime = {
+  id: '46474', type: 'anime',
+  attributes: {
+    canonicalTitle: 'Sousou no Frieren',
+    titles: { en: 'Frieren: Beyond Journey’s End', en_jp: 'Sousou no Frieren', ja_jp: '葬送のフリーレン' },
+    synopsis: 'After the party of heroes defeated the Demon King…\n', subtype: 'TV', status: 'finished',
+    startDate: '2023-09-29', endDate: '2024-03-22', episodeCount: 28, episodeLength: 24, averageRating: '88.87',
+    posterImage: { small: 'https://img.test/s.jpg', medium: 'https://img.test/m.jpg', large: 'https://img.test/l.jpg' },
+    coverImage: { large: 'https://img.test/cover.jpg' },
+  },
+  relationships: { categories: { data: [{ type: 'categories', id: '157' }, { type: 'categories', id: '184' }] } },
 };
-// La temporada 2 aparece primero en la búsqueda: el mapeo debe elegir por id de AniList, no por orden.
+const categories = [
+  { type: 'categories', id: '157', attributes: { title: 'Adventure' } },
+  { type: 'categories', id: '184', attributes: { title: 'Drama' } },
+  { type: 'categories', id: '999', attributes: { title: 'De otro anime' } },
+];
+const mappings = [
+  { type: 'mappings', id: '1', attributes: { externalSite: 'myanimelist/anime', externalId: '52991' } },
+  { type: 'mappings', id: '2', attributes: { externalSite: 'anilist/anime', externalId: '154587' } },
+];
+const kitsuImg = (id: number) => `https://media.kitsu.app/anime/${id}/cover_image/large-abc.jpeg`;
+// La temporada 2 aparece primero en la búsqueda: el mapeo debe elegir por id, no por orden.
 const apSearch = {
   data: [
-    { _id: 'S2', title: 'Sousou no Frieren 2', posterImage: { medium: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx182255-a.jpg' } },
-    { _id: 'S1', title: 'Sousou no Frieren', posterImage: { medium: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx154587-b.jpg' } },
+    { _id: 'S2', title: 'Sousou no Frieren 2', coverImage: { large: kitsuImg(49240) } },
+    { _id: 'S1', title: 'Sousou no Frieren', coverImage: { large: kitsuImg(46474) } },
   ],
 };
 const apEpisodes = { data: [{ uid: 'u1', number: '1', title: 'The Journey’s End' }, { uid: 'u2', number: '2', title: 'It Didn’t Have to Be Magic' }] };
@@ -43,10 +56,10 @@ function mockUpstreams(over: Record<string, () => Response> = {}) {
     const url = new URL(input instanceof Request ? input.url : String(input));
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
     calls.push({ url, body });
-    const key = url.host === 'graphql.anilist.co' ? (body.query.includes('Page(') ? 'anilist:page' : 'anilist:media') : url.pathname;
+    const key = url.host === 'kitsu.app' ? url.pathname.replace('/api/edge', 'kitsu:') : url.pathname;
     if (over[key]) return over[key]();
-    if (key === 'anilist:page') return Response.json({ data: { Page: { pageInfo: { currentPage: 1, lastPage: 3, total: 60 }, media: [media] } } });
-    if (key === 'anilist:media') return Response.json({ data: { Media: media } });
+    if (key === 'kitsu:/anime') return Response.json({ data: [anime], included: categories, meta: { count: 60 } });
+    if (key.startsWith('kitsu:/anime/')) return Response.json({ data: anime, included: [...categories, ...mappings] });
     if (key === '/search') return Response.json(apSearch);
     if (key === '/anime/S1/episode') return Response.json(apEpisodes);
     if (key === '/ep/u2') return Response.json(apEp);
@@ -69,39 +82,41 @@ afterEach(() => {
   calls.length = 0;
 });
 
-describe('miru catálogo (AniList)', () => {
-  it('lista airing → filtra por estado y devuelve el modelo canónico', async () => {
+describe('miru catálogo (Kitsu)', () => {
+  it('lista airing → filtra por estado, pagina por offset y devuelve el modelo canónico', async () => {
     mockUpstreams();
     const { status, body } = await get('/miru/lists/airing?page=2');
     expect(status).toBe(200);
-    expect(calls[0].body.variables).toMatchObject({ page: 2, sort: ['POPULARITY_DESC'], status: 'RELEASING' });
-    expect(body).toMatchObject({ page: 1, totalPages: 3, totalResults: 60 });
+    const q = calls[0].url.searchParams;
+    expect([q.get('filter[status]'), q.get('sort'), q.get('page[offset]'), q.get('page[limit]')]).toEqual(['current', 'popularityRank', '20', '20']);
+    expect(body).toMatchObject({ page: 2, totalPages: 3, totalResults: 60 });
     expect(body.items[0]).toEqual({
-      id: 'anilist-154587', title: 'Frieren: Beyond Journey’s End',
+      id: 'kitsu-46474', title: 'Frieren: Beyond Journey’s End',
       alternativeTitles: { romaji: 'Sousou no Frieren', english: 'Frieren: Beyond Journey’s End', native: '葬送のフリーレン' },
-      synopsis: 'The adventure is over\n\nbut life goes on.',
-      cover: { sm: 'https://img.test/m.jpg', md: 'https://img.test/l.jpg', lg: 'https://img.test/xl.jpg' },
-      banner: null, format: 'TV', status: 'FINISHED', season: 'FALL', year: 2023, episodeCount: 28, genres: ['Adventure', 'Drama'], rating: 9.1,
+      synopsis: 'After the party of heroes defeated the Demon King…',
+      cover: { sm: 'https://img.test/s.jpg', md: 'https://img.test/m.jpg', lg: 'https://img.test/l.jpg' },
+      banner: 'https://img.test/cover.jpg', format: 'TV', status: 'FINISHED', season: 'FALL', year: 2023, episodeCount: 28,
+      genres: ['Adventure', 'Drama'], rating: 8.9,
     });
   });
 
-  it('detalle con fechas parciales, estudios e ids externos', async () => {
+  it('detalle con ids externos de los mapeos', async () => {
     mockUpstreams();
-    const { status, body } = await get('/miru/anime/anilist-154587');
+    const { status, body } = await get('/miru/anime/kitsu-46474');
     expect(status).toBe(200);
-    expect(calls[0].body.variables).toEqual({ id: 154587 });
-    expect(body).toMatchObject({ startDate: '2023-09-29', endDate: '2024-03', duration: 24, studios: ['MADHOUSE'], externalIds: { anilist: 154587, mal: 52991 } });
+    expect(calls[0].url.pathname).toBe('/api/edge/anime/46474');
+    expect(body).toMatchObject({ startDate: '2023-09-29', endDate: '2024-03-22', duration: 24, externalIds: { kitsu: 46474, anilist: 154587, mal: 52991 } });
   });
 
   it('id con formato inválido → 400', async () => {
-    expect((await get('/miru/anime/154587')).status).toBe(400);
+    expect((await get('/miru/anime/anilist-154587')).status).toBe(400);
   });
 });
 
 describe('miru reproducción (AnimeParadise)', () => {
   it('episodios de la obra exacta según el id de AniList', async () => {
     mockUpstreams();
-    const { status, body } = await get('/miru/anime/anilist-154587/episodes');
+    const { status, body } = await get('/miru/anime/kitsu-46474/episodes');
     expect(status).toBe(200);
     expect(body).toEqual([
       { number: 1, title: 'The Journey’s End', isFiller: false, isRecap: false },
@@ -111,7 +126,7 @@ describe('miru reproducción (AnimeParadise)', () => {
 
   it('playback → HLS con subtítulos, sin cache', async () => {
     mockUpstreams();
-    const { status, body, headers } = await get('/miru/playback/anilist-154587?ep=2');
+    const { status, body, headers } = await get('/miru/playback/kitsu-46474?ep=2');
     expect(status).toBe(200);
     expect(headers.get('Cache-Control')).toBe('no-store');
     expect(calls.find((c) => c.url.pathname === '/ep/u2')?.url.searchParams.get('origin')).toBe('S1');
@@ -120,36 +135,43 @@ describe('miru reproducción (AnimeParadise)', () => {
         provider: 'animeparadise', url: 'https://stream.animeparadise.moe/m3u8?url=TOKEN', kind: 'hls', quality: 'auto', language: 'sub',
         subtitles: [{ language: 'es', label: 'Spanish', url: 'https://stream.test/captions?url=x' }],
       }],
-      // MegaPlay se consulta también; aquí su embed no existe y queda en `failed` sin tumbar la respuesta.
-      failed: [{ provider: 'megaplay', code: 'MIRU_UPSTREAM_ERROR' }],
+      failed: [],
     });
   });
 
   it('episodio inexistente → 404', async () => {
     mockUpstreams();
-    const { status, body } = await get('/miru/playback/anilist-154587?ep=99');
+    const { status, body } = await get('/miru/playback/kitsu-46474?ep=99');
     expect(status).toBe(404);
     expect(body.error.code).toBe('MIRU_NOT_FOUND');
   });
 
   it('todos los proveedores caídos → 503 con código propio', async () => {
     mockUpstreams({ '/search': () => new Response('boom', { status: 500 }) });
-    const { status, body } = await get('/miru/playback/anilist-154587?ep=1');
+    const { status, body } = await get('/miru/playback/kitsu-46474?ep=1');
     expect(status).toBe(503);
     expect(body.error.code).toBe('MIRU_SOURCE_UNAVAILABLE');
   });
 });
 
 describe('miru mapeo de AnimeParadise', () => {
-  const ref = { anilist: 154587, mal: 52991, year: 2023, titles: ['Sousou no Frieren'] };
-  const entry = (over: object) => ({ _id: 'X', title: 'Sousou no Frieren', posterImage: { medium: 'https://kitsu.test/p.jpg' }, animeSeason: { year: 2023 }, ...over });
+  const ref = { kitsu: 46474, anilist: 154587, mal: 52991, year: 2023, titles: ['Sousou no Frieren'] };
+  const entry = (over: object) => ({ _id: 'X', title: 'Sousou no Frieren', posterImage: { medium: 'https://other.test/p.jpg' }, animeSeason: { year: 2023 }, ...over });
   const find = (data: object[]) => {
     mockUpstreams({ '/search': () => Response.json({ data }) });
     return createAnimeParadise(new HttpClient({ retry: false, disableRateLimit: true })).findEntry(ref);
   };
 
-  it('por id de AniList en el póster, aunque otra temporada salga antes', async () => {
+  it('por id de Kitsu en la portada, aunque otra temporada salga antes', async () => {
     expect(await find(apSearch.data)).toBe('animeparadise:S1');
+  });
+
+  it('por id de Kitsu en el formato viejo de URL', async () => {
+    expect(await find([{ _id: 'O', title: 'x', coverImage: { large: 'https://media.kitsu.app/anime/cover_images/46474/large.jpg' } }])).toBe('animeparadise:O');
+  });
+
+  it('por id de AniList en el póster si no hay portada de Kitsu', async () => {
+    expect(await find([{ _id: 'A', title: 'x', posterImage: { large: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx154587-b.jpg' } }])).toBe('animeparadise:A');
   });
 
   it('obra que no tiene → null (no adivina por título)', async () => {
@@ -168,13 +190,14 @@ describe('miru mapeo de AnimeParadise', () => {
     expect(await find([entry({ title: 'Sousou no Frieren Season 2' })])).toBeNull();
   });
 
-  it('con póster de AniList de otra obra → no, aunque título y año coincidan', async () => {
+  it('con id de otra obra en las imágenes → no, aunque título y año coincidan', async () => {
     expect(await find([entry({ posterImage: { medium: 'https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx999-a.jpg' } })])).toBeNull();
+    expect(await find([entry({ coverImage: { large: kitsuImg(999) } })])).toBeNull();
   });
 });
 
 describe('miru getPlayback (scatter-gather)', () => {
-  const ref = { anilist: 1, mal: null, year: 2023, titles: ['X'] };
+  const ref = { kitsu: 1, anilist: null, mal: null, year: 2023, titles: ['X'] };
   const src = (provider: string, language: 'sub' | 'dub') => ({ provider, url: `https://${provider}.test/${language}.m3u8`, kind: 'hls' as const, language, subtitles: [] });
   const provider = (id: string, over: Partial<AnimePlaybackProvider> = {}): AnimePlaybackProvider => ({
     id,
@@ -200,20 +223,20 @@ describe('miru getPlayback (scatter-gather)', () => {
 describe('miru Jikan', () => {
   it('personajes con actores de voz; la foto genérica "?" sale como null', async () => {
     mockUpstreams();
-    const { status, body } = await get('/miru/anime/anilist-154587/characters');
+    const { status, body } = await get('/miru/anime/kitsu-46474/characters');
     expect(status).toBe(200);
     expect(body).toEqual([{ name: 'Frieren', image: 'https://cdn.test/frieren.jpg', role: 'Main', voiceActors: [{ name: 'Tanezaki, Atsumi', image: null, language: 'Japanese' }] }]);
   });
 
   it('staff', async () => {
     mockUpstreams();
-    const { body } = await get('/miru/anime/anilist-154587/staff');
+    const { body } = await get('/miru/anime/kitsu-46474/staff');
     expect(body).toEqual([{ name: 'Saitou, Keiichirou', image: 'https://cdn.test/s.jpg', positions: ['Director'] }]);
   });
 
   it('Jikan caído → los episodios salen igual, sin marcas', async () => {
     mockUpstreams({ '/v4/anime/52991/episodes': () => new Response('down', { status: 503 }) });
-    const { status, body } = await get('/miru/anime/anilist-6/episodes');
+    const { status, body } = await get('/miru/anime/kitsu-6/episodes');
     expect(status).toBe(200);
     expect(body.every((e: any) => !e.isFiller && !e.isRecap)).toBe(true);
   });

@@ -3,8 +3,8 @@ import { pageSchema } from '../../shared/page';
 
 // Modelo canónico de Miru. Ningún campo de AniList ni de AnimeParadise sale de aquí hacia el front.
 
-/** `anilist-154587`: la fuente forma parte del id. */
-export const AnimeId = z.string().regex(/^anilist-\d+$/).openapi({ example: 'anilist-154587' });
+/** `kitsu-46474`: la fuente forma parte del id. */
+export const AnimeId = z.string().regex(/^kitsu-\d+$/).openapi({ example: 'kitsu-46474' });
 
 export const Image = z.object({ sm: z.string(), md: z.string(), lg: z.string() }).nullable().openapi('MiruImage');
 
@@ -30,8 +30,7 @@ export const AnimeDetail = AnimeSummary.extend({
   duration: z.number().int().nullable().openapi({ description: 'Minutos por episodio' }),
   startDate: z.string().nullable().openapi({ description: 'YYYY-MM-DD (puede ser parcial: YYYY o YYYY-MM)' }),
   endDate: z.string().nullable(),
-  studios: z.array(z.string()),
-  externalIds: z.object({ anilist: z.number().int(), mal: z.number().int().nullable() }),
+  externalIds: z.object({ kitsu: z.number().int(), anilist: z.number().int().nullable(), mal: z.number().int().nullable() }),
 }).openapi('MiruAnimeDetail');
 
 export const Episode = z
