@@ -9,7 +9,7 @@
   },
   "vars": {
     // Módulos montados en este Worker. Desplegar el mismo código con otro valor aísla verticales.
-    "ENABLED_MODULES": "auth,flix",
+    "ENABLED_MODULES": "auth,flix,miru",
     // Comparte la cookie de sesión entre subdominios. Vacío en local.
     "COOKIE_DOMAIN": ""
   }

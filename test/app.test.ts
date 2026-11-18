@@ -9,7 +9,7 @@ describe('app', () => {
   it('GET /health', async () => {
     const res = await app.request('/health', {}, env);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ status: 'ok', modules: ['auth', 'flix'] });
+    expect(await res.json()).toEqual({ status: 'ok', modules: ['auth', 'flix', 'miru'] });
   });
 
   it('GET /openapi.json documenta /health', async () => {
