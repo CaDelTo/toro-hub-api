@@ -3,5 +3,7 @@ TMDB_API_KEY=
 TMDB_API_URL=
 TMDB_IMAGE_URL=
 PLAYER_BASE_URL=
+# Fuentes extra, p. ej. [{"id":"otra","movie":"https://ejemplo.test/movie/{tmdb}","tv":"https://ejemplo.test/tv/{tmdb}/{s}/{e}"}]
+STREAM_PROVIDERS=
 SITE_PASSWORD=
 JWT_SECRET=
