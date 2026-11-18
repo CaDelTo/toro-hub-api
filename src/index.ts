@@ -3,12 +3,13 @@ import { logger } from 'hono/logger';
 import type { AppEnv } from './env';
 import auth from './modules/auth/routes';
 import flix from './modules/flix/routes';
+import miru from './modules/miru/routes';
 import { errorJson } from './shared/errors';
 import { createModule, enabledModules } from './shared/module';
 import { requireSession } from './shared/session';
 
 // Módulos de vertical. Nunca se importan entre sí.
-const modules: Record<string, OpenAPIHono<AppEnv>> = { auth, flix };
+const modules: Record<string, OpenAPIHono<AppEnv>> = { auth, flix, miru };
 const PUBLIC_MODULES = new Set(['auth']);
 
 const app = createModule('app');

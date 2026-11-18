@@ -6,6 +6,8 @@ type FetchJsonOptions = {
   /** Segundos que Cloudflare cachea la respuesta del proveedor (solo 2xx). */
   cacheTtl?: number;
   headers?: HeadersInit;
+  /** Si viene, la petición es POST con este cuerpo en JSON (p. ej. GraphQL). */
+  body?: unknown;
 };
 
 /** Rechaza con UPSTREAM_TIMEOUT si `p` no termina en `ms` (para adapters que no usan fetchJson). */
@@ -17,12 +19,12 @@ export function withTimeout<T>(p: Promise<T>, ms: number, module: string): Promi
   return Promise.race([p, timeout]).finally(() => clearTimeout(timer));
 }
 
-/** GET a un proveedor externo con timeout; los fallos salen como AppError del módulo. */
-export async function fetchJson<T>(url: string | URL, { module, timeoutMs = 5000, cacheTtl, headers }: FetchJsonOptions): Promise<T> {
+/** GET (o POST si hay `body`) a un proveedor externo con timeout; los fallos salen como AppError del módulo. */
+export async function fetchJson<T>(url: string | URL, { module, timeoutMs = 5000, cacheTtl, headers, body }: FetchJsonOptions): Promise<T> {
   let res: Response;
   try {
     res = await fetch(url, {
-      headers,
+      ...(body === undefined ? { headers } : { method: 'POST', body: JSON.stringify(body), headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...headers } }),
       signal: AbortSignal.timeout(timeoutMs),
       cf: cacheTtl ? { cacheTtl, cacheEverything: true } : undefined,
     });
