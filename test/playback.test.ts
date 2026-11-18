@@ -148,3 +148,36 @@ describe('URLs de proveedores por entorno', () => {
     expect(body.error.code).toBe('FLIX_NOT_CONFIGURED');
   });
 });
+
+describe('proveedores de embed por STREAM_PROVIDERS', () => {
+  const extra = JSON.stringify([
+    { id: 'alt', movie: 'https://alt.test/m/{tmdb}', tv: 'https://alt.test/t/{tmdb}/{s}/{e}' },
+  ]);
+
+  it('agrega las fuentes extra después de 111movies, en orden', async () => {
+    const { body } = await get('/flix/playback/tmdb-tv-1399?s=2&e=5', { STREAM_PROVIDERS: extra });
+    expect(body.sources.map((s: { provider: string; url: string }) => [s.provider, s.url])).toEqual([
+      ['111movies', 'https://player.test/tv/1399/2/5'],
+      ['alt', 'https://alt.test/t/1399/2/5'],
+    ]);
+  });
+
+  it('plantilla con {imdb}: resuelve el id de IMDb con TMDB', async () => {
+    const { createEmbedProvider } = await import('../src/modules/flix/providers/streams/embed');
+    const p = createEmbedProvider({ id: 'imdbish', movie: 'https://x.test/{imdb}', tv: 'https://x.test/{imdb}/{s}x{e}' });
+    expect(p.needs).toBe('imdb');
+    expect(await p.getSources({ type: 'movie', tmdb: 603, imdb: 'tt0133093' })).toEqual([{ provider: 'imdbish', url: 'https://x.test/tt0133093', kind: 'embed' }]);
+  });
+
+  it('JSON inválido se ignora sin romper el playback', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { status, body } = await get('/flix/playback/tmdb-movie-603', { STREAM_PROVIDERS: '[{"id":"x"' });
+    expect(status).toBe(200);
+    expect(body.sources).toHaveLength(1);
+  });
+
+  it('/flix/health lista los proveedores extra', async () => {
+    const { body } = await get('/flix/health', { STREAM_PROVIDERS: extra });
+    expect(body.providers.map((p: { id: string }) => p.id)).toEqual(['tmdb', '111movies', 'alt']);
+  });
+});

@@ -10,6 +10,8 @@ export type Bindings = {
   TMDB_IMAGE_URL?: string;
   /** Base del embed del player (equivale a NEXT_PUBLIC_PLAYER_BASE_URL del front). Sin ella no hay fuentes de reproducción. */
   PLAYER_BASE_URL?: string;
+  /** Fuentes extra: JSON [{"id","movie","tv"}] con plantillas {tmdb} {imdb} {s} {e} (providers/streams/embed.ts). */
+  STREAM_PROVIDERS?: string;
 };
 
 export type AppEnv = { Bindings: Bindings };

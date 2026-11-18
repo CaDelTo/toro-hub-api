@@ -3,6 +3,7 @@ import { AppError } from '../../shared/errors';
 import type { MetadataProvider, StreamProvider } from './ports';
 import { createTmdbProvider } from './providers/metadata/tmdb';
 import { create111Movies } from './providers/streams/111movies';
+import { createEmbedProvider, parseEmbedConfigs } from './providers/streams/embed';
 
 // Proveedores activos de Flix. Agregar uno = crear su adapter y sumarlo aquí.
 // Fallback y enriquecedores de metadata (OMDb) se registran aquí cuando lleguen.
@@ -15,5 +16,8 @@ export function metadataProvider(env: Bindings): MetadataProvider {
   return createTmdbProvider({ apiKey, apiUrl, imageUrl });
 }
 
-/** En orden de prioridad: el primero es la fuente por defecto del reproductor. */
-export const streamProviders = (env: Bindings): StreamProvider[] => [env.PLAYER_BASE_URL && create111Movies(env.PLAYER_BASE_URL)].filter((p) => !!p);
+/** En orden de prioridad: el primero es la fuente por defecto del reproductor. Los de STREAM_PROVIDERS van después. */
+export const streamProviders = (env: Bindings): StreamProvider[] => [
+  ...(env.PLAYER_BASE_URL ? [create111Movies(env.PLAYER_BASE_URL)] : []),
+  ...parseEmbedConfigs(env.STREAM_PROVIDERS).map(createEmbedProvider),
+];
