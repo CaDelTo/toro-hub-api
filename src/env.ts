@@ -12,6 +12,9 @@ export type Bindings = {
   PLAYER_BASE_URL?: string;
   /** Fuentes extra: JSON [{"id","movie","tv"}] con plantillas {tmdb} {imdb} {s} {e} (providers/streams/embed.ts). */
   STREAM_PROVIDERS?: string;
+  /** Notas de IMDb y RT (providers/metadata/omdb.ts). Opcionales: sin ellas el detalle trae solo la de TMDB. */
+  OMDB_API_KEY?: string;
+  OMDB_API_URL?: string;
 };
 
 export type AppEnv = { Bindings: Bindings };

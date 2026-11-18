@@ -1,10 +1,10 @@
 import { createRoute, z } from '@hono/zod-openapi';
-import { breakerState } from '../../shared/breaker';
+import { breakerState, withBreaker } from '../../shared/breaker';
 import { cacheFor } from '../../shared/cache';
 import { errorResponses } from '../../shared/errors';
 import { createModule } from '../../shared/module';
 import { Collection, DiscoverQuery, Genre, ListKind, Person, Playback, ReviewPage, Season, TitleDetail, TitleId, TitlePage } from './domain';
-import { METADATA_ID, metadataProvider, streamProviders } from './registry';
+import { METADATA_ID, metadataProvider, ratingsEnricher, streamProviders } from './registry';
 import { getPlayback } from './services/playback';
 
 const HOUR = 3600;
@@ -88,7 +88,14 @@ flix.openapi(
     request: { params: Id },
     responses: ok(TitleDetail),
   }),
-  async (c) => c.json(await metadataProvider(c.env).getTitle(c.req.valid('param').id), 200),
+  async (c) => {
+    const title = await metadataProvider(c.env).getTitle(c.req.valid('param').id);
+    const enricher = ratingsEnricher(c.env);
+    const imdb = title.externalIds.imdb;
+    // Las notas extra son un plus: si OMDb falla o tarda, el detalle sale solo con TMDB.
+    if (enricher && imdb) title.ratings.push(...(await withBreaker(`flix:ratings:${enricher.id}`, 'flix', () => enricher.ratings(imdb)).catch(() => [])));
+    return c.json(title, 200);
+  },
 );
 
 flix.openapi(
