@@ -5,5 +5,8 @@ TMDB_IMAGE_URL=
 PLAYER_BASE_URL=
 # Fuentes extra, p. ej. [{"id":"otra","movie":"https://ejemplo.test/movie/{tmdb}","tv":"https://ejemplo.test/tv/{tmdb}/{s}/{e}"}]
 STREAM_PROVIDERS=
+# Notas de IMDb y RT (opcional). Clave gratuita en omdbapi.com; URL: https://www.omdbapi.com/
+OMDB_API_KEY=
+OMDB_API_URL=
 SITE_PASSWORD=
 JWT_SECRET=

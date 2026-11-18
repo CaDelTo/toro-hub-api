@@ -148,6 +148,49 @@ describe('flix /titles', () => {
     expect(body.seasons[0]).toEqual({ seasonNumber: 1, name: 'Season 1', overview: '', poster: expect.any(Object), airDate: '2011-04-17', episodeCount: 10 });
   });
 
+  describe('notas de OMDb', () => {
+    // Un id por test: las respuestas de TMDB y OMDb quedan en la cache de borde entre tests.
+    const detail = (id: number) => ({ ...tv, id, vote_average: 8.4, vote_count: 24000, external_ids: { imdb_id: `tt${id}` } });
+    const omdbEnv = { TMDB_API_KEY: 'v3key', OMDB_API_KEY: 'omdbkey', OMDB_API_URL: 'https://omdb.test/' };
+
+    it('suma IMDb y RT (en escala 0–10) a la de TMDB', async () => {
+      mockTmdb({
+        '/tv/1401': detail(1401),
+        '/': { Response: 'True', imdbRating: '9.2', imdbVotes: '2,345,678', Ratings: [{ Source: 'Internet Movie Database', Value: '9.2/10' }, { Source: 'Rotten Tomatoes', Value: '89%' }] },
+      });
+      const { status, body } = await get('/flix/titles/tmdb-tv-1401', omdbEnv);
+      expect(status).toBe(200);
+      expect(body.ratings).toEqual([
+        { source: 'tmdb', value: 8.4, votes: 24000 },
+        { source: 'imdb', value: 9.2, votes: 2345678 },
+        { source: 'rt', value: 8.9 },
+      ]);
+      const omdbCall = calls.find((u) => u.host === 'omdb.test')!;
+      expect(omdbCall.searchParams.get('i')).toBe('tt1401');
+      expect(omdbCall.searchParams.get('apikey')).toBe('omdbkey');
+    });
+
+    it('valores N/A y "Response: False" → sin notas extra', async () => {
+      mockTmdb({ '/tv/1402': detail(1402), '/': { Response: 'True', imdbRating: 'N/A', imdbVotes: 'N/A', Ratings: [] } });
+      expect((await get('/flix/titles/tmdb-tv-1402', omdbEnv)).body.ratings).toEqual([{ source: 'tmdb', value: 8.4, votes: 24000 }]);
+      mockTmdb({ '/tv/1405': detail(1405), '/': { Response: 'False', Error: 'Incorrect IMDb ID.' } });
+      expect((await get('/flix/titles/tmdb-tv-1405', omdbEnv)).body.ratings).toHaveLength(1);
+    });
+
+    it('si OMDb falla, el detalle sale igual con la nota de TMDB', async () => {
+      mockTmdb({ '/tv/1403': detail(1403) }); // OMDb → 404
+      const { status, body } = await get('/flix/titles/tmdb-tv-1403', omdbEnv);
+      expect(status).toBe(200);
+      expect(body.ratings).toEqual([{ source: 'tmdb', value: 8.4, votes: 24000 }]);
+    });
+
+    it('sin OMDB_API_KEY no se llama a OMDb', async () => {
+      mockTmdb({ '/tv/1404': detail(1404) });
+      await get('/flix/titles/tmdb-tv-1404');
+      expect(calls.some((u) => u.host === 'omdb.test')).toBe(false);
+    });
+  });
+
   it('temporada con episodios', async () => {
     mockTmdb({ '/tv/1399/season/1': { season_number: 1, name: 'Season 1', episodes: [{ season_number: 1, episode_number: 1, name: 'Winter Is Coming', still_path: '/e.jpg', vote_average: 8, runtime: 62 }] } });
     const { body } = await get('/flix/titles/tmdb-tv-1399/seasons/1');
