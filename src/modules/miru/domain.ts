@@ -78,7 +78,34 @@ export const AnimePage = pageSchema(AnimeSummary).openapi('MiruAnimePage');
 
 export const ListKind = z.enum(['trending', 'popular', 'top-rated', 'airing', 'upcoming']);
 
+/** Filtros de Season y Explore. Todos opcionales: sin ninguno es el catálogo entero por popularidad. */
+export const BrowseFilters = z.object({
+  season: z.enum(['WINTER', 'SPRING', 'SUMMER', 'FALL']).optional(),
+  year: z.coerce.number().int().min(1917).max(2100).optional(),
+  format: z.enum(['TV', 'MOVIE', 'OVA', 'ONA', 'SPECIAL', 'MUSIC']).optional(),
+  status: z.enum(['RELEASING', 'FINISHED', 'NOT_YET_RELEASED']).optional(),
+  genre: z.string().regex(/^[a-z0-9-]{1,40}$/).optional().openapi({ description: 'Slug de la categoría', example: 'action' }),
+  sort: z.enum(['popular', 'rating', 'newest']).default('popular'),
+});
+
+export const Weekday = z.enum(['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY']);
+
+/** Una serie en emisión con su hueco semanal. Día y hora en Japón: el front los pasa a la zona del usuario. */
+export const ScheduleEntry = z
+  .object({
+    id: z.string(),
+    title: z.string(),
+    alternativeTitles: z.object({ romaji: z.string().nullable(), english: z.string().nullable(), native: z.string().nullable() }),
+    cover: Image,
+    episodeCount: z.number().int().nullable(),
+    day: Weekday.openapi({ description: 'Día de emisión en JST' }),
+    time: z.string().regex(/^\d{2}:\d{2}$/).openapi({ description: 'HH:MM en JST (UTC+9, sin horario de verano)', example: '23:30' }),
+  })
+  .openapi('MiruScheduleEntry');
+
 export type AnimeSummary = z.infer<typeof AnimeSummary>;
+export type ScheduleEntry = z.infer<typeof ScheduleEntry>;
+export type Weekday = z.infer<typeof Weekday>;
 export type AnimeDetail = z.infer<typeof AnimeDetail>;
 export type Episode = z.infer<typeof Episode>;
 export type Character = z.infer<typeof Character>;
@@ -86,4 +113,5 @@ export type Staff = z.infer<typeof Staff>;
 export type Source = z.infer<typeof Source>;
 export type Playback = z.infer<typeof Playback>;
 export type ListKind = z.infer<typeof ListKind>;
+export type BrowseFilters = z.infer<typeof BrowseFilters>;
 export type Page<T> = { items: T[]; page: number; totalPages: number; totalResults: number };

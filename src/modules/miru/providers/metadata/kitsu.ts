@@ -1,7 +1,7 @@
 import { withBreaker } from '../../../../shared/breaker';
 import { AppError } from '../../../../shared/errors';
 import { fetchJson } from '../../../../shared/http';
-import type { AnimeDetail, AnimeSummary, ListKind, Page } from '../../domain';
+import type { AnimeDetail, AnimeSummary, BrowseFilters, ListKind, Page } from '../../domain';
 import type { AnimeMetadataProvider } from '../../ports';
 
 // Kitsu (JSON:API) en vez de AniList: AniList bloquea a mano las IPs de Cloudflare Workers (403 "manually blocked").
@@ -43,6 +43,21 @@ const FORMAT: Record<string, string> = { TV: 'TV', movie: 'MOVIE', OVA: 'OVA', O
 const STATUS: Record<string, string> = { current: 'RELEASING', finished: 'FINISHED', upcoming: 'NOT_YET_RELEASED', unreleased: 'NOT_YET_RELEASED', tba: 'NOT_YET_RELEASED' };
 // Temporadas de anime (como AniList): invierno dic–feb, primavera mar–may, verano jun–ago, otoño sep–nov.
 const SEASONS = ['WINTER', 'SPRING', 'SUMMER', 'FALL'] as const;
+
+// Filtros canónicos → parámetros de Kitsu (inversos de FORMAT y STATUS).
+const KITSU_SUBTYPE: Record<NonNullable<BrowseFilters['format']>, string> = { TV: 'TV', MOVIE: 'movie', OVA: 'OVA', ONA: 'ONA', SPECIAL: 'special', MUSIC: 'music' };
+const KITSU_STATUS: Record<NonNullable<BrowseFilters['status']>, string> = { RELEASING: 'current', FINISHED: 'finished', NOT_YET_RELEASED: 'upcoming' };
+const KITSU_SORT: Record<BrowseFilters['sort'], string> = { popular: 'popularityRank', rating: 'ratingRank', newest: '-startDate' };
+
+function browseParams(f: BrowseFilters): Record<string, string> {
+  const p: Record<string, string> = { sort: KITSU_SORT[f.sort] };
+  if (f.season) p['filter[season]'] = f.season.toLowerCase();
+  if (f.year) p['filter[seasonYear]'] = String(f.year);
+  if (f.format) p['filter[subtype]'] = KITSU_SUBTYPE[f.format];
+  if (f.status) p['filter[status]'] = KITSU_STATUS[f.status];
+  if (f.genre) p['filter[categories]'] = f.genre;
+  return p;
+}
 
 /** Títulos de las categorías incluidas (`include=categories`) que pertenecen a este anime. */
 const genres = (a: Anime, included: Resource[] = []) => {
@@ -90,6 +105,28 @@ export function createKitsuProvider(): AnimeMetadataProvider {
   return {
     id: 'kitsu',
     list: (kind, p) => page(LISTS[kind](), p),
+    browse: (filters, p) => page(browseParams(filters), p),
+    async idsFromMal(mal) {
+      // Filtro con varios valores separados por coma, de 20 en 20 (límite de página de Kitsu), en paralelo.
+      const chunks = Array.from({ length: Math.ceil(mal.length / PER_PAGE) }, (_, i) => mal.slice(i * PER_PAGE, (i + 1) * PER_PAGE));
+      const docs = await Promise.all(
+        chunks.map((ids) =>
+          get<Resource[]>('/mappings', {
+            'filter[externalSite]': 'myanimelist/anime',
+            'filter[externalId]': ids.join(','),
+            'fields[mappings]': 'externalId,item',
+            'page[limit]': String(PER_PAGE),
+          }),
+        ),
+      );
+      const out = new Map<number, string>();
+      for (const m of docs.flatMap((d) => d.data)) {
+        // `item` es una relación a uno (objeto), no a muchos como las de Resource.
+        const item = (m.relationships?.item as unknown as { data?: { id: string; type: string } } | undefined)?.data;
+        if (item?.type === 'anime') out.set(Number(m.attributes.externalId), `kitsu-${item.id}`);
+      }
+      return out;
+    },
     search: (q, p) => page({ 'filter[text]': q }, p),
     async getAnime(id) {
       const m = /^kitsu-(\d+)$/.exec(id);

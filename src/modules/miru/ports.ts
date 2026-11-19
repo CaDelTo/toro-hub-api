@@ -1,12 +1,18 @@
-import type { AnimeDetail, AnimeSummary, Character, ListKind, Page, Source, Staff } from './domain';
+import type { AnimeDetail, AnimeSummary, BrowseFilters, Character, ListKind, Page, ScheduleEntry, Source, Staff } from './domain';
 
 /** Port de catálogo (Kitsu hoy). */
 export interface AnimeMetadataProvider {
   id: string;
   list(kind: ListKind, page: number): Promise<Page<AnimeSummary>>;
+  browse(filters: BrowseFilters, page: number): Promise<Page<AnimeSummary>>;
   search(q: string, page: number): Promise<Page<AnimeSummary>>;
   getAnime(id: string): Promise<AnimeDetail>;
+  /** Id canónico por id de MyAnimeList; los que no tienen mapeo no aparecen en el Map. */
+  idsFromMal(mal: number[]): Promise<Map<number, string>>;
 }
+
+/** Hueco semanal tal como lo da el enriquecedor, antes de tener id canónico. */
+export type ScheduleSlot = Omit<ScheduleEntry, 'id'> & { mal: number };
 
 /** Enriquecedor por id de MyAnimeList (Jikan). */
 export interface AnimeEnricher {
@@ -15,6 +21,8 @@ export interface AnimeEnricher {
   getStaff(mal: number): Promise<Staff[]>;
   /** Números de episodio marcados como relleno o recap. */
   getEpisodeFlags(mal: number): Promise<{ filler: Set<number>; recap: Set<number> }>;
+  /** Series en emisión con su día y hora de emisión (JST). */
+  getSchedule(): Promise<ScheduleSlot[]>;
 }
 
 /** Lo que un proveedor de vídeo necesita para encontrar la obra exacta. */

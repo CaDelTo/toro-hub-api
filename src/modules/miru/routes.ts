@@ -3,7 +3,7 @@ import { breakerState } from '../../shared/breaker';
 import { cacheFor } from '../../shared/cache';
 import { AppError, errorResponses } from '../../shared/errors';
 import { createModule } from '../../shared/module';
-import { AnimeDetail, AnimeId, AnimePage, Character, Episode, ListKind, Playback, Staff } from './domain';
+import { AnimeDetail, AnimeId, AnimePage, BrowseFilters, Character, Episode, ListKind, Playback, ScheduleEntry, Staff } from './domain';
 import type { AnimeRef } from './ports';
 import { enricher, METADATA_ID, metadataProvider, playbackProviders } from './registry';
 import { getEpisodes, getPlayback } from './services/playback';
@@ -41,6 +41,8 @@ const miru = createModule('miru');
 
 miru.use('/lists/*', cacheFor('miru', HOUR));
 miru.use('/search', cacheFor('miru', 10 * 60));
+miru.use('/browse', cacheFor('miru', HOUR));
+miru.use('/schedule', cacheFor('miru', 6 * HOUR));
 miru.use('/anime/:id', cacheFor('miru', DAY));
 miru.use('/anime/:id/episodes', cacheFor('miru', HOUR)); // series en emisión suman episodios
 miru.use('/anime/:id/characters', cacheFor('miru', DAY));
@@ -56,6 +58,43 @@ miru.openapi(
     responses: ok(AnimePage),
   }),
   async (c) => c.json(await metadataProvider().list(c.req.valid('param').kind, c.req.valid('query').page), 200),
+);
+
+miru.openapi(
+  createRoute({
+    method: 'get',
+    path: '/browse',
+    tags: ['miru'],
+    summary: 'Catálogo filtrado por temporada, año, formato, estado y género (Season y Explore)',
+    request: { query: BrowseFilters.extend({ page: Page }) },
+    responses: ok(AnimePage),
+  }),
+  async (c) => {
+    const { page, ...filters } = c.req.valid('query');
+    return c.json(await metadataProvider().browse(filters, page), 200);
+  },
+);
+
+miru.openapi(
+  createRoute({
+    method: 'get',
+    path: '/schedule',
+    tags: ['miru'],
+    summary: 'Emisiones de la semana (Calendar): día y hora en JST',
+    description: 'Horario de MyAnimeList (Jikan) con ids de Kitsu. Las series sin mapeo a Kitsu no salen: no tendrían página.',
+    responses: ok(z.array(ScheduleEntry)),
+  }),
+  async (c) => {
+    const slots = await enricher().getSchedule();
+    const ids = await metadataProvider().idsFromMal(slots.map((s) => s.mal));
+    return c.json(
+      slots.flatMap(({ mal, ...s }) => {
+        const id = ids.get(mal);
+        return id ? [{ id, ...s }] : [];
+      }),
+      200,
+    );
+  },
 );
 
 miru.openapi(
