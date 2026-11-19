@@ -129,7 +129,7 @@ describe('miru catálogo (Kitsu)', () => {
 
   it('schedule → horario de Jikan con ids de Kitsu; sin mapeo o sin hora no sale', async () => {
     const jk = (mal_id: number, day: string | null, time: string | null) => ({
-      mal_id, title: `Romaji ${mal_id}`, title_english: mal_id === 1 ? 'English 1' : null, title_japanese: 'ジャ', episodes: 12,
+      mal_id, title: `Romaji ${mal_id}`, title_english: mal_id === 1 ? 'English 1' : null, title_japanese: 'ジャ', episodes: 12, aired: { from: mal_id === 1 ? '2026-10-04T00:00:00+00:00' : null },
       images: { jpg: { small_image_url: 's.jpg', image_url: 'm.jpg', large_image_url: 'l.jpg' } },
       broadcast: { day, time, timezone: 'Asia/Tokyo' },
     });
@@ -156,8 +156,8 @@ describe('miru catálogo (Kitsu)', () => {
     const mappingCall = calls.find((c) => c.url.pathname === '/api/edge/mappings')!;
     expect(mappingCall.url.searchParams.get('filter[externalId]')).toBe('1,2,4'); // la 3 no tiene hora: ni se busca
     expect(body).toEqual([
-      { id: 'kitsu-100', title: 'English 1', alternativeTitles: { romaji: 'Romaji 1', english: 'English 1', native: 'ジャ' }, cover: { sm: 's.jpg', md: 'm.jpg', lg: 'l.jpg' }, episodeCount: 12, day: 'SUNDAY', time: '23:30' },
-      { id: 'kitsu-200', title: 'Romaji 2', alternativeTitles: { romaji: 'Romaji 2', english: null, native: 'ジャ' }, cover: { sm: 's.jpg', md: 'm.jpg', lg: 'l.jpg' }, episodeCount: 12, day: 'MONDAY', time: '01:00' },
+      { id: 'kitsu-100', title: 'English 1', alternativeTitles: { romaji: 'Romaji 1', english: 'English 1', native: 'ジャ' }, cover: { sm: 's.jpg', md: 'm.jpg', lg: 'l.jpg' }, episodeCount: 12, startDate: '2026-10-04', day: 'SUNDAY', time: '23:30' },
+      { id: 'kitsu-200', title: 'Romaji 2', alternativeTitles: { romaji: 'Romaji 2', english: null, native: 'ジャ' }, cover: { sm: 's.jpg', md: 'm.jpg', lg: 'l.jpg' }, episodeCount: 12, startDate: null, day: 'MONDAY', time: '01:00' },
     ]);
   });
 

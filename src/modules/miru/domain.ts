@@ -98,6 +98,7 @@ export const ScheduleEntry = z
     alternativeTitles: z.object({ romaji: z.string().nullable(), english: z.string().nullable(), native: z.string().nullable() }),
     cover: Image,
     episodeCount: z.number().int().nullable(),
+    startDate: z.string().nullable().openapi({ description: 'Estreno YYYY-MM-DD (para estimar el episodio en emisión)', example: '2026-10-04' }),
     day: Weekday.openapi({ description: 'Día de emisión en JST' }),
     time: z.string().regex(/^\d{2}:\d{2}$/).openapi({ description: 'HH:MM en JST (UTC+9, sin horario de verano)', example: '23:30' }),
   })

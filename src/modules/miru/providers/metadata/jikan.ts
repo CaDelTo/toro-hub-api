@@ -24,6 +24,7 @@ type ScheduleAnime = {
   title_english: string | null;
   title_japanese: string | null;
   episodes: number | null;
+  aired?: { from: string | null };
   images?: { jpg?: { small_image_url?: string; image_url?: string; large_image_url?: string } };
   broadcast?: { day: string | null; time: string | null; timezone: string | null };
 };
@@ -47,6 +48,7 @@ function toSlot(a: ScheduleAnime): ScheduleSlot | null {
     alternativeTitles: { romaji: a.title, english: a.title_english, native: a.title_japanese },
     cover: lg ? { sm: i?.small_image_url ?? lg, md: i?.image_url ?? lg, lg } : null,
     episodeCount: a.episodes,
+    startDate: a.aired?.from?.slice(0, 10) ?? null,
     day,
     time: b.time,
   };
