@@ -1,6 +1,7 @@
 import { withBreaker } from '../../../../shared/breaker';
 import { fetchJson } from '../../../../shared/http';
-import type { AnimeEnricher } from '../../ports';
+import type { Weekday } from '../../domain';
+import type { AnimeEnricher, ScheduleSlot } from '../../ports';
 
 const API_URL = 'https://api.jikan.moe/v4';
 const DAY = 24 * 3600;
@@ -17,8 +18,43 @@ const image = (i?: Img) => {
   return url && !url.includes('questionmark') ? url : null;
 };
 
+type ScheduleAnime = {
+  mal_id: number;
+  title: string;
+  title_english: string | null;
+  title_japanese: string | null;
+  episodes: number | null;
+  images?: { jpg?: { small_image_url?: string; image_url?: string; large_image_url?: string } };
+  broadcast?: { day: string | null; time: string | null; timezone: string | null };
+};
+
+// "Mondays" → "MONDAY". Jikan da la emisión en hora de Japón.
+const WEEKDAY: Record<string, Weekday> = {
+  Mondays: 'MONDAY', Tuesdays: 'TUESDAY', Wednesdays: 'WEDNESDAY', Thursdays: 'THURSDAY', Fridays: 'FRIDAY', Saturdays: 'SATURDAY', Sundays: 'SUNDAY',
+};
+// shortcut: hasta 8 páginas de 25 (200 series); una temporada normal trae ~120 con día y hora.
+const MAX_SCHEDULE_PAGES = 8;
+
+function toSlot(a: ScheduleAnime): ScheduleSlot | null {
+  const b = a.broadcast;
+  const day = b?.day ? WEEKDAY[b.day] : undefined;
+  if (!day || !b?.time || !/^\d{2}:\d{2}$/.test(b.time) || (b.timezone && b.timezone !== 'Asia/Tokyo')) return null;
+  const i = a.images?.jpg;
+  const lg = i?.large_image_url ?? i?.image_url;
+  return {
+    mal: a.mal_id,
+    title: a.title_english ?? a.title,
+    alternativeTitles: { romaji: a.title, english: a.title_english, native: a.title_japanese },
+    cover: lg ? { sm: i?.small_image_url ?? lg, md: i?.image_url ?? lg, lg } : null,
+    episodeCount: a.episodes,
+    day,
+    time: b.time,
+  };
+}
+
 export function createJikanEnricher(): AnimeEnricher {
-  const get = <T>(path: string) => withBreaker('miru:metadata:jikan', 'miru', () => fetchJson<T>(`${API_URL}${path}`, { module: 'miru', cacheTtl: DAY }));
+  const get = <T>(path: string, cacheTtl = DAY, timeoutMs?: number) =>
+    withBreaker('miru:metadata:jikan', 'miru', () => fetchJson<T>(`${API_URL}${path}`, { module: 'miru', cacheTtl, timeoutMs }));
 
   return {
     id: 'jikan',
@@ -49,6 +85,18 @@ export function createJikanEnricher(): AnimeEnricher {
         if (!res.pagination.has_next_page) break;
       }
       return { filler, recap };
+    },
+    async getSchedule() {
+      const slots = new Map<number, ScheduleSlot>(); // Jikan repite series entre páginas
+      for (let page = 1; page <= MAX_SCHEDULE_PAGES; page++) {
+        const res = await get<{ data: ScheduleAnime[]; pagination: { has_next_page: boolean } }>(`/schedules?sfw=true&kids=false&limit=25&page=${page}`, 6 * 3600, 15_000); // /schedules sin caché en Jikan pasa de 5 s
+        for (const a of res.data) {
+          const slot = toSlot(a);
+          if (slot) slots.set(slot.mal, slot);
+        }
+        if (!res.pagination.has_next_page) break;
+      }
+      return [...slots.values()];
     },
   };
 }

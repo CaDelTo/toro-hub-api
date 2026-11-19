@@ -108,6 +108,59 @@ describe('miru catálogo (Kitsu)', () => {
     expect(body).toMatchObject({ startDate: '2023-09-29', endDate: '2024-03-22', duration: 24, externalIds: { kitsu: 46474, anilist: 154587, mal: 52991 } });
   });
 
+  it('browse → traduce los filtros canónicos a los de Kitsu', async () => {
+    mockUpstreams();
+    const { status, body } = await get('/miru/browse?season=FALL&year=2026&format=MOVIE&status=RELEASING&genre=slice-of-life&sort=newest');
+    expect(status).toBe(200);
+    expect(Object.fromEntries([...calls[0].url.searchParams].filter(([k]) => k.startsWith('filter') || k === 'sort'))).toEqual({
+      'filter[season]': 'fall', 'filter[seasonYear]': '2026', 'filter[subtype]': 'movie', 'filter[status]': 'current',
+      'filter[categories]': 'slice-of-life', sort: '-startDate',
+    });
+    expect(body.items[0].id).toBe('kitsu-46474');
+  });
+
+  it('browse sin filtros → todo por popularidad; filtro inválido → 400', async () => {
+    mockUpstreams();
+    await get('/miru/browse');
+    expect([...calls[0].url.searchParams.keys()].filter((k) => k.startsWith('filter['))).toEqual([]);
+    expect(calls[0].url.searchParams.get('sort')).toBe('popularityRank');
+    expect((await get('/miru/browse?season=AUTUMN')).status).toBe(400);
+  });
+
+  it('schedule → horario de Jikan con ids de Kitsu; sin mapeo o sin hora no sale', async () => {
+    const jk = (mal_id: number, day: string | null, time: string | null) => ({
+      mal_id, title: `Romaji ${mal_id}`, title_english: mal_id === 1 ? 'English 1' : null, title_japanese: 'ジャ', episodes: 12,
+      images: { jpg: { small_image_url: 's.jpg', image_url: 'm.jpg', large_image_url: 'l.jpg' } },
+      broadcast: { day, time, timezone: 'Asia/Tokyo' },
+    });
+    mockUpstreams({
+      // La serie 1 se repite en la página 2: no debe duplicarse.
+      '/v4/schedules': () => {
+        const page = calls.at(-1)!.url.searchParams.get('page');
+        return Response.json(
+          page === '1'
+            ? { data: [jk(1, 'Sundays', '23:30'), jk(2, 'Mondays', '01:00'), jk(3, null, null)], pagination: { has_next_page: true } }
+            : { data: [jk(1, 'Sundays', '23:30'), jk(4, 'Fridays', '12:00')], pagination: { has_next_page: false } },
+        );
+      },
+      'kitsu:/mappings': () =>
+        Response.json({
+          data: [
+            { id: 'm1', type: 'mappings', attributes: { externalId: '1' }, relationships: { item: { data: { type: 'anime', id: '100' } } } },
+            { id: 'm2', type: 'mappings', attributes: { externalId: '2' }, relationships: { item: { data: { type: 'anime', id: '200' } } } },
+          ],
+        }),
+    });
+    const { status, body } = await get('/miru/schedule');
+    expect(status).toBe(200);
+    const mappingCall = calls.find((c) => c.url.pathname === '/api/edge/mappings')!;
+    expect(mappingCall.url.searchParams.get('filter[externalId]')).toBe('1,2,4'); // la 3 no tiene hora: ni se busca
+    expect(body).toEqual([
+      { id: 'kitsu-100', title: 'English 1', alternativeTitles: { romaji: 'Romaji 1', english: 'English 1', native: 'ジャ' }, cover: { sm: 's.jpg', md: 'm.jpg', lg: 'l.jpg' }, episodeCount: 12, day: 'SUNDAY', time: '23:30' },
+      { id: 'kitsu-200', title: 'Romaji 2', alternativeTitles: { romaji: 'Romaji 2', english: null, native: 'ジャ' }, cover: { sm: 's.jpg', md: 'm.jpg', lg: 'l.jpg' }, episodeCount: 12, day: 'MONDAY', time: '01:00' },
+    ]);
+  });
+
   it('id con formato inválido → 400', async () => {
     expect((await get('/miru/anime/anilist-154587')).status).toBe(400);
   });
